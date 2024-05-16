@@ -1,0 +1,424 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Using derived widgets</title>
+<link rel="stylesheet" type="text/css" href="style.css">
+<meta name="generator" content="DocBook XSL Stylesheets Vsnapshot">
+<link rel="home" href="index.html" title="Programming with gtkmm 3">
+<link rel="up" href="chapter-builder.html" title="Chapter 26. Glade and Gtk::Builder">
+<link rel="prev" href="sec-builder-accessing-widgets.html" title="Accessing widgets">
+<link rel="next" href="chapter-internationalization.html" title="Chapter 27. Internationalization and Localization">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">Using derived widgets</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="sec-builder-accessing-widgets.html"><img src="icons/prev.png" alt="Prev"></a> </td>
+<th width="60%" align="center">Chapter 26. Glade and Gtk::Builder</th>
+<td width="20%" align="right"> <a accesskey="n" href="chapter-internationalization.html"><img src="icons/next.png" alt="Next"></a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="section">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="sec-builder-using-derived-widgets"></a>Using derived widgets</h2></div></div></div>
+
+
+<p>
+You can use <code class="classname">Gtk::Builder</code> and
+<span class="application">Glade</span> to layout your own custom widgets
+derived from <span class="application">gtkmm</span> widget classes. This keeps your code organized and
+encapsulated, separating declarative presentation from business logic, avoiding
+having most of your source just be setting properties and packing in containers.
+</p>
+
+<p>Use <code class="methodname">Gtk::Builder::get_widget_derived()</code> like so:
+</p>
+<pre class="programlisting">
+DerivedDialog* pDialog = nullptr;
+builder-&gt;get_widget_derived("DialogBasic", pDialog);
+</pre>
+<p>
+</p>
+
+<p>
+Your derived class must have a constructor that takes a pointer to the
+underlying C type, and the <code class="classname">Gtk::Builder</code> instance.
+All relevant classes of <span class="application">gtkmm</span> typedef their underlying C type as
+<code class="classname">BaseObjectType</code> (<code class="classname">Gtk::Dialog</code>
+typedefs <code class="classname">BaseObjectType</code> as <span class="type">GtkDialog</span>, for instance).
+</p>
+<p>
+You must call the base class's constructor in the initialization list, providing the C pointer. For
+instance,
+</p>
+<pre class="programlisting">
+DerivedDialog::DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; builder)
+: Gtk::Dialog(cobject)
+{
+}
+</pre>
+<p>
+</p>
+
+<p>
+You could then encapsulate the manipulation of the child widgets in the
+constructor of the derived class, maybe using <code class="methodname">get_widget()</code>
+or <code class="methodname">get_widget_derived()</code> again. For instance,
+</p>
+<pre class="programlisting">
+DerivedDialog::DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; builder)
+: Gtk::Dialog(cobject),
+  m_builder(builder),
+  m_pButton(nullptr)
+{
+  //Get the Glade-instantiated Button, and connect a signal handler:
+  m_builder-&gt;get_widget("quit_button", m_pButton);
+
+  if(m_pButton)
+  {
+    m_pButton-&gt;signal_clicked().connect( sigc::mem_fun(*this, &amp;DerivedDialog::on_button_quit) );
+  }
+}
+</pre>
+<p>
+</p>
+
+<p>
+Starting with <span class="application">gtkmm</span> 3.19.7, it's possible to pass additional arguments from
+<code class="methodname">get_widget_derived()</code> to the constructor of the derived
+widget. For instance, this call to <code class="methodname">get_widget_derived()</code>
+</p>
+<pre class="programlisting">
+DerivedDialog* pDialog = nullptr;
+builder-&gt;get_widget_derived("DialogBasic", pDialog, true);
+</pre>
+<p>
+can invoke this constructor
+</p>
+<pre class="programlisting">
+DerivedDialog::DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; builder, bool warning)
+: Gtk::Dialog(cobject),
+  m_builder(builder),
+  m_pButton(nullptr)
+{
+  // ....
+}
+</pre>
+<p>
+</p>
+
+<div class="section">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="sec-builder-and-property"></a>Gtk::Builder and Glib::Property</h3></div></div></div>
+
+
+<div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><table border="0" summary="Note">
+<tr>
+<td rowspan="2" align="center" valign="top" width="25"><img alt="[Note]" src="icons/note.png"></td>
+<th align="left">Note</th>
+</tr>
+<tr><td align="left" valign="top"><p>
+User-defined properties will be read correctly from the <code class="filename">.glade</code>
+file only if you use <span class="application">glibmm</span> 2.62.0 or newer.
+</p></td></tr>
+</table></div>
+<p>
+If your derived widget uses <code class="classname">Glib::Property</code>, it becomes slightly
+more complicated. A derived widget that contains <code class="classname">Glib::Property</code>
+members must be registered with its own name in the <span class="type">GType</span> system.
+It must be registered before any of the <code class="methodname">create_from_*()</code> or
+<code class="methodname">add_from_*()</code> methods are called, meaning that you may have
+to create an instance of your derived widget just to have its class registered.
+Your derived widget must have a constructor that has the parameters required by
+<code class="methodname">get_widget_derived()</code> and calls the <code class="classname">Glib::ObjectBase</code>
+constructor to register the <span class="type">GType</span>.
+</p>
+<pre class="programlisting">
+DerivedButton::DerivedButton(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; builder)
+: Glib::ObjectBase("MyButton"), // The GType name will be gtkmm__CustomObject_MyButton.
+  Gtk::Button(cobject),
+  prop_ustring(*this, "button-ustring"),
+  prop_int(*this, "button-int", 10)
+{
+  // ....
+}
+</pre>
+<p>
+</p>
+<p>
+When using <span class="application">gtkmm</span> with a version of <span class="application">glibmm</span> from 2.62
+onwards, it is possible also to specify properties of derived widgets, declared
+in C++ using <span class="application">gtkmm</span>, within <code class="filename">.glade</code> files and load/set
+these using <code class="classname">Gtk::Builder</code>. See the documentation of
+<code class="classname">Gtk::Builder</code> for more details on how to achieve this.
+Glade won’t recognise such properties as-is, but it should be able to through
+use of <a class="ulink" href="https://developer-old.gnome.org/gladeui/stable/properties.html" target="_top">
+property class definitions</a> and a catalog declaring those new properties.
+</p>
+</div>
+
+<div class="section">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="builder-example-derived"></a>Example</h3></div></div></div>
+
+
+<p>
+This example shows how to load a <span class="application">Glade</span> file at runtime and access the widgets via derived classes.
+</p>
+
+<p><a class="ulink" href="https://gitlab.gnome.org/GNOME/gtkmm-documentation/tree/gtkmm-3-24/examples/book/builder/derived" target="_top">Source Code</a></p>
+
+<p>File: <code class="filename">derivedbutton.h</code> (For use with gtkmm 3)</p>
+<pre class="programlisting">
+#ifndef GTKMM_EXAMPLE_DERIVED_BUTTON_H
+#define GTKMM_EXAMPLE_DERIVED_BUTTON_H
+
+#include &lt;gtkmm.h&gt;
+
+class DerivedButton : public Gtk::Button
+{
+public:
+  DerivedButton();
+  DerivedButton(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; refGlade);
+  virtual ~DerivedButton();
+
+  // Provide proxies for the properties. The proxy allows you to connect to
+  // the 'changed' signal, etc.
+  Glib::PropertyProxy&lt;Glib::ustring&gt; property_ustring() { return prop_ustring.get_proxy(); }
+  Glib::PropertyProxy&lt;int&gt; property_int() { return prop_int.get_proxy(); }
+
+private:
+  Glib::Property&lt;Glib::ustring&gt; prop_ustring;
+  Glib::Property&lt;int&gt; prop_int;
+};
+
+#endif //GTKMM_EXAMPLE_DERIVED_BUTTON_H
+</pre>
+<p>File: <code class="filename">deriveddialog.h</code> (For use with gtkmm 3)</p>
+<pre class="programlisting">
+#ifndef GTKMM_EXAMPLE_DERIVED_DIALOG_H
+#define GTKMM_EXAMPLE_DERIVED_DIALOG_H
+
+#include &lt;gtkmm.h&gt;
+#include "derivedbutton.h"
+
+class DerivedDialog : public Gtk::Dialog
+{
+public:
+  DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; refGlade);
+  DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; refGlade,
+    bool is_glad);
+  virtual ~DerivedDialog();
+
+protected:
+  //Signal handlers:
+  void on_button_quit();
+
+  Glib::RefPtr&lt;Gtk::Builder&gt; m_refGlade;
+  DerivedButton* m_pButton;
+};
+
+#endif //GTKMM_EXAMPLE_DERIVED_DIALOG_H
+</pre>
+<p>File: <code class="filename">derivedbutton.cc</code> (For use with gtkmm 3)</p>
+<pre class="programlisting">
+#include "derivedbutton.h"
+#include &lt;iostream&gt;
+
+namespace
+{
+void on_ustring_changed()
+{
+  std::cout &lt;&lt; "- ustring property changed!" &lt;&lt; std::endl;
+}
+
+void on_int_changed()
+{
+  std::cout &lt;&lt; "- int property changed!" &lt;&lt; std::endl;
+}
+} // anonymous namespace
+
+// For creating a dummy object in main.cc.
+DerivedButton::DerivedButton()
+: Glib::ObjectBase("MyButton"),
+  prop_ustring(*this, "button-ustring"),
+  prop_int(*this, "button-int", 10)
+{
+}
+
+DerivedButton::DerivedButton(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; /* refGlade */)
+: // To register custom properties, you must register a custom GType.  If
+  // you don't know what that means, don't worry, just remember to add
+  // this Glib::ObjectBase constructor call to your class' constructor.
+  // The GType name will be gtkmm__CustomObject_MyButton.
+  Glib::ObjectBase("MyButton"),
+  Gtk::Button(cobject),
+  // register the properties with the object and give them names
+  prop_ustring(*this, "button-ustring"),
+  // this one has a default value
+  prop_int(*this, "button-int", 10)
+{
+  // Register some handlers that will be called when the values of the
+  // specified parameters are changed.
+  property_ustring().signal_changed().connect(sigc::ptr_fun(&amp;on_ustring_changed));
+  property_int().signal_changed().connect(sigc::ptr_fun(&amp;on_int_changed));
+}
+
+DerivedButton::~DerivedButton()
+{
+}
+</pre>
+<p>File: <code class="filename">deriveddialog.cc</code> (For use with gtkmm 3)</p>
+<pre class="programlisting">
+#include "deriveddialog.h"
+#include &lt;iostream&gt;
+
+DerivedDialog::DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; refGlade)
+: Gtk::Dialog(cobject),
+  m_refGlade(refGlade),
+  m_pButton(nullptr)
+{
+  // Get the Glade-instantiated Button, and connect a signal handler:
+  m_refGlade-&gt;get_widget_derived("quit_button", m_pButton);
+  if (m_pButton)
+  {
+    // The user-defined properties in DerivedButton are read correctly from the
+    // derived.glade file only if you use glibmm 2.62.0 or newer.
+    m_pButton-&gt;signal_clicked().connect( sigc::mem_fun(*this, &amp;DerivedDialog::on_button_quit) );
+    std::cout &lt;&lt; "ustring, int: " &lt;&lt; m_pButton-&gt;property_ustring()
+              &lt;&lt; ", " &lt;&lt; m_pButton-&gt;property_int() &lt;&lt; std::endl;
+    m_pButton-&gt;property_int() = 99;
+    std::cout &lt;&lt; "ustring, int: " &lt;&lt; m_pButton-&gt;property_ustring()
+              &lt;&lt; ", " &lt;&lt; m_pButton-&gt;property_int() &lt;&lt; std::endl;
+  }
+}
+
+// The first two parameters are mandatory in a constructor that will be called
+// from Gtk::Builder::get_widget_derived().
+// Additional parameters, if any, correspond to additional arguments in the call
+// to Gtk::Builder::get_widget_derived().
+DerivedDialog::DerivedDialog(BaseObjectType* cobject, const Glib::RefPtr&lt;Gtk::Builder&gt;&amp; refGlade,
+  bool is_glad)
+: DerivedDialog(cobject, refGlade) // Delegate to the other constructor
+{
+  // Show an icon.
+  auto pImage = Gtk::make_managed&lt;Gtk::Image&gt;();
+  pImage-&gt;set_from_icon_name(is_glad ? "face-smile" : "face-sad", Gtk::ICON_SIZE_DIALOG);
+  pImage-&gt;show_all();
+  get_content_area()-&gt;pack_start(*pImage);
+}
+
+DerivedDialog::~DerivedDialog()
+{
+}
+
+void DerivedDialog::on_button_quit()
+{
+  hide(); //hide() will cause Gtk::Application::run() to end.
+}
+</pre>
+<p>File: <code class="filename">main.cc</code> (For use with gtkmm 3)</p>
+<pre class="programlisting">
+#include "deriveddialog.h"
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;
+
+// Not really used anywhere, but force an instance to be created.
+DerivedButton* my_globally_accessible_button = nullptr;
+
+int main (int argc, char **argv)
+{
+  bool show_icon = false;
+  bool is_glad = true;
+  int argc1 = argc;
+  if (argc &gt; 1)
+  {
+    if (std::strcmp(argv[1], "--glad") == 0)
+    {
+      show_icon = true;
+      is_glad = true;
+      argc1 = 1; // Don't give the command line arguments to Gtk::Application.
+    }
+    else if (std::strcmp(argv[1], "--sad") == 0)
+    {
+      show_icon = true;
+      is_glad = false;
+      argc1 = 1; // Don't give the command line arguments to Gtk::Application.
+    }
+  }
+
+  auto app = Gtk::Application::create(argc1, argv, "org.gtkmm.example");
+
+  // Create a dummy instance before the call to refBuilder-&gt;add_from_file().
+  // This creation registers DerivedButton's class in the GType system.
+  my_globally_accessible_button = new DerivedButton();
+
+  //Load the Glade file and instantiate its widgets:
+  auto refBuilder = Gtk::Builder::create();
+  try
+  {
+    refBuilder-&gt;add_from_file("derived.glade");
+  }
+  catch(const Glib::FileError&amp; ex)
+  {
+    std::cerr &lt;&lt; "FileError: " &lt;&lt; ex.what() &lt;&lt; std::endl;
+    return 1;
+  }
+  catch(const Glib::MarkupError&amp; ex)
+  {
+    std::cerr &lt;&lt; "MarkupError: " &lt;&lt; ex.what() &lt;&lt; std::endl;
+    return 1;
+  }
+  catch(const Gtk::BuilderError&amp; ex)
+  {
+    std::cerr &lt;&lt; "BuilderError: " &lt;&lt; ex.what() &lt;&lt; std::endl;
+    return 1;
+  }
+
+  //Get the GtkBuilder-instantiated dialog:
+  DerivedDialog* pDialog = nullptr;
+  if (show_icon)
+    // This call to get_widget_derived() requires gtkmm 3.19.7 or higher.
+    refBuilder-&gt;get_widget_derived("DialogDerived", pDialog, is_glad);
+  else
+    refBuilder-&gt;get_widget_derived("DialogDerived", pDialog);
+  if(pDialog)
+  {
+    //Start:
+    app-&gt;run(*pDialog);
+  }
+
+  delete pDialog;
+
+  return 0;
+}
+</pre>
+
+
+</div>
+
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="sec-builder-accessing-widgets.html"><img src="icons/prev.png" alt="Prev"></a> </td>
+<td width="20%" align="center"><a accesskey="u" href="chapter-builder.html"><img src="icons/up.png" alt="Up"></a></td>
+<td width="40%" align="right"> <a accesskey="n" href="chapter-internationalization.html"><img src="icons/next.png" alt="Next"></a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">Accessing widgets </td>
+<td width="20%" align="center"><a accesskey="h" href="index.html"><img src="icons/home.png" alt="Home"></a></td>
+<td width="40%" align="right" valign="top"> Chapter 27. Internationalization and Localization</td>
+</tr>
+</table>
+</div>
+</body>
+</html>
